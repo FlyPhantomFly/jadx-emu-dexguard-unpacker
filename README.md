@@ -6,26 +6,41 @@ A [jadx-emu](https://github.com/nitanmarcel/jadx-emu) extension that recovers th
 
 The emulator provides a faithful, non-debuggable, correctly-signed Android environment so DexGuard's RASP/anti-tamper checks pass during emulation. A read-only **DEX-reference scan** (no decompilation) ranks loader candidates; running a candidate's entry points triggers its decrypt-and-load, and hooks on the in-memory / file-path / `DexFile` loaders (and reflective `Constructor.newInstance`) capture the plaintext DEX. A bounded fixpoint drives stage-2 classes revealed by earlier stages. Recovered DEX is header-repaired so baksmali/dex2jar/jadx accept it.
 
+## Requirements
+
+- **jadx** 1.5.6+ and **JDK 21** (to build).
+- **jadx-emu with the rewritten hook API and `Hooks.after`.** This extension (2.x) is built and tested against jadx-emu `0.1.0-beta.6-fp1`: upstream's hook rewrite (commit `ba65619`) plus the return-value (`after`) hook seam. `Hooks.after` is not in a released jadx-emu yet (nitanmarcel/jadx-emu PR #6), so the engine is built from the `upstream-hooks` branch of the fork shown below. The 1.x line of this extension (v1.0.x) needs the older `0.1.0-beta.6` engine instead. The two are not interchangeable: a mismatched pair fails when the extension initializes (`NoSuchMethodError`).
+
+The engine is labelled `-fp1` so that it never overwrites a `0.1.0-beta.6` that the 1.x line compiled against in your local Maven repository.
+
 ## Install
 
-1. **jadx** 1.5.6+ and **jadx-emu** (2.0.0) installed as a jadx plugin:
+1. Build the engine and install it as the jadx-emu plugin. Keep exactly one jadx-emu jar installed.
    ```bash
-   jadx plugins --install "github:nitanmarcel:jadx-emu"
+   git clone --branch upstream-hooks https://github.com/FlyPhantomFly/jadx-emu.git
+   cd jadx-emu
+   sed -i 's/^version = .*/version = "0.1.0-beta.6-fp1"/' build.gradle.kts
+   ./gradlew dist
+   jadx plugins --install-jar build/dist/jadx-emu-0.1.0-beta.6-fp1.jar
    ```
 2. Build this extension's jar (below) and drop it into jadx-emu's extensions directory — `<jadx config>/plugins-data/jadx-emu/extensions/` (on Linux `~/.config/jadx/plugins-data/jadx-emu/extensions/`):
    ```bash
    cp build/libs/dexguard-unpacker-*.jar ~/.config/jadx/plugins-data/jadx-emu/extensions/
    ```
-3. Restart jadx-gui (extensions are discovered at startup via the `META-INF/services/jadx.plugins.emu.api.EmuExtension` entry).
+3. Restart jadx-gui (extensions are discovered at startup via the `META-INF/services/jadx.plugins.emu.api.EmuExtension` entry). The log shows a `dexguard-unpacker v2.0.0` line when the extension loaded.
 
 ## Build
 
+The extension compiles against the engine from your local Maven repository, so publish the engine first (same checkout and label as above):
+
 ```bash
-./gradlew test     # unit tests: AOSP math, DEX repair, AES + crypto-capture hook path, signature parser
-./gradlew jar      # build/libs/dexguard-unpacker.jar   (VERSION env overrides the version)
+(cd jadx-emu && ./gradlew publishToMavenLocal)
+./gradlew test     # AOSP math, DEX repair, signature parser, the hook chain, and end-to-end runs of real emulated Dalvik
+                   # (smali is assembled in the test): inline scheduler, reflective framework stubs, crypto/decrypt capture
+./gradlew jar      # build/libs/dexguard-unpacker-<version>.jar   (VERSION env overrides the version)
 ```
 
-`jadx-emu` and `jadx-core` are `compileOnly` and resolve from Maven Central (JDK 21 required). To build against a local jadx-emu fork instead, use the composite build.
+`jadx-emu` is `compileOnly` and resolves from `mavenLocal()` (it is not on Maven Central at this label); `jadx-core` and the test libraries come from Maven Central. To build against a local engine checkout without publishing it, use a Gradle composite build. CI does the publish-then-build sequence above (`.github/workflows/build.yml`).
 
 ## Usage
 
@@ -53,6 +68,7 @@ Under `<dataDir>/<inputHash>/` (the data dir is printed on startup):
 - `hidden-<sha>.dex` — recovered DEX (header-repaired).
 - `report.json` — recovered-dex summary + the emulated environment. Counts are read from disk, so they always match `ls` (including fixpoint-recovered dexes).
 - `telemetry.json` — only with `telemetry=true`: which stubs fired, which returned UNKNOWN (un-foldable constants worth a new stub), unresolved classes/methods, and an event log — how to see *why* a run recovered what it did.
+- `diagnosis.txt` — only when a run recovers 0 dex: the likely cause and what to change (also logged as a warning). A partial recovery logs its hints without writing the file.
 - `crypto/crypto.json` (+ `crypto/plain-<sha>.bin`) — when `javax.crypto` decryption is seen.
 - `decrypt/decrypt-capture.json` (+ dumps) — when `captureDecrypt` observes a listed custom decrypt method.
 
@@ -71,10 +87,11 @@ maxDepth=64
 clockAdvanceMs=1               # ms the virtual clock jumps per read; raise (e.g. 1000) to make anti-analysis timing loops exit fast
 
 # recovery
-captureCrypto=true            # reproduce Cipher.doFinal host-side; capture key/iv/plaintext
+captureCrypto=true            # observe the app's own Cipher output (doFinal/update); record key/iv/plaintext
 feedDecryptedDex=true         # when a decrypted plaintext is a DEX, load it automatically
 fixpoint=true                 # drive stage-2+ lifecycle classes revealed by earlier stages
 fixpointMaxRounds=6
+persistHiddenVm=false         # keep the hidden-dex VM (and its clinit state) across stages instead of rebuilding it per stage; opt-in
 
 # sweep
 scanMode=dex                  # dex (raw-DEX reference scan) | signature (emulator-source fallback)
@@ -87,12 +104,16 @@ autoUnpack=false              # headless: run the sweep automatically during `ja
 captureDecrypt=false
 captureDecryptMethods=        # comma-separated full sigs, e.g. Lcom/foo/Bar;->a(Ljava/io/InputStream;IS)Ljava/io/InputStream;
 
+# native (JNI) backend
+nativeBackend=none            # none (replay only) | a provider id such as unidbg (see native-unidbg/)
+
 # fake-device overrides (all optional; seeded from the manifest otherwise)
 device.model=Pixel 7
 device.fingerprint=google/panther/panther:13/...:user/release-keys
 device.sdkInt=33
 device.androidId=0123456789abcdef
 device.installer=com.android.vending
+# also: device.manufacturer, brand, device, product, hardware, tags, type, minSdk, targetSdk, debuggable
 ```
 
 Tuning notes: leave `sweepBudgetMs=0` for a guaranteed-complete run; set e.g. `90000` for faster triage (a slow-but-productive loader is never starved — the budget only stops launching *more* work). The emulated app is non-debuggable, Play-installed and correctly-signed (`AppInfo` reads the real signing certificate and manifest SDK levels); edit `DeviceProfile` / `device.*` to change it.
@@ -106,7 +127,7 @@ Lcom/foo/Bar;->decrypt=1234
 Lcom/foo/Bar;->tag=release
 ```
 
-Providing a replay file makes the extension wire a native bridge into the VMs; leave it out for DexGuard targets. To execute the real `.so` instead of replaying values, see the experimental unidbg backend in [`native-unidbg/`](native-unidbg/README.md).
+Providing a replay file makes the extension wire a native bridge into the VMs; leave it out for DexGuard targets. To execute the real `.so` instead of replaying values, see the experimental unidbg backend in [`native-unidbg/`](native-unidbg/README.md) (not yet updated for the 2.x engine).
 
 ## Status
 
