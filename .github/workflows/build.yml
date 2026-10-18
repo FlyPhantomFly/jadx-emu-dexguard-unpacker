@@ -14,6 +14,17 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+
+      # jadx-emu with Hooks.after (nitanmarcel/jadx-emu PR #6) is not on Maven Central yet,
+      # so build it from the PR branch into the runner's local Maven repo.
+      # Delete this step once a jadx-emu release contains Hooks.after, and bump emuVersion.
+      - name: Build jadx-emu (Hooks.after) into mavenLocal
+        run: |
+          git clone --depth 1 --branch upstream-hooks https://github.com/FlyPhantomFly/jadx-emu.git /tmp/jadx-emu
+          cd /tmp/jadx-emu
+          sed -i 's/^version = .*/version = "0.1.0-beta.6-fp1"/' build.gradle.kts
+          ./gradlew --no-daemon publishToMavenLocal
+
       - name: Build and test
         run: ./gradlew --no-daemon test jar
       - uses: actions/upload-artifact@v4
