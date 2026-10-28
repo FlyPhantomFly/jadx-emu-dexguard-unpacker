@@ -7,7 +7,7 @@ import jadx.plugins.emu.api.ExtensionMode
 import jadx.plugins.emu.exec.NativeBridge as EngineNativeBridge
 import java.util.ServiceLoader
 
-const val DEXGUARD_UNPACKER_VERSION = "2.0.0"
+const val DEXGUARD_UNPACKER_VERSION = "2.1.0"
 
 class DexGuardExtension : EmuExtension {
 

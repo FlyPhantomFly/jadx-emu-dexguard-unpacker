@@ -1,0 +1,13 @@
+jadx-emu-dexguard-unpacker
+==========================
+
+An extension for jadx-emu (https://github.com/nitanmarcel/jadx-emu). It links the
+jadx-emu engine (io.github.flyphantomfly:jadx-emu), which is licensed under the GNU
+General Public License, version 2; this extension is therefore also distributed
+under GPLv2 (see LICENSE).
+
+Copyright (C) 2026 FlyPhantomFly.
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License, version 2. It is distributed WITHOUT ANY
+WARRANTY. See the LICENSE file for the full license text.
