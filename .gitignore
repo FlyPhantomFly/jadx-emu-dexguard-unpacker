@@ -3,3 +3,7 @@ build/
 .kotlin/
 .idea/
 *.iml
+
+# maintainer docs are kept local only (never committed; synced to release trees before staging)
+AGENTS.md
+CLAUDE.md

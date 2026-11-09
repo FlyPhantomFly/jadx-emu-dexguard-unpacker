@@ -1,5 +1,15 @@
 # Changes
 
+## 2.2.0
+
+The extension now detects DexGuard's centralized native "return to Java" routine before it runs.
+`NativeRoutineScan` scans the APK's `lib/arm64-v8a/*.so` for the six `movz`+`movk` AArch64
+constant pairs (0x55AA55AA / 0xAAAA5555 / 0x2A55AA55 into x10/x12/x13) that fingerprint the routine -
+the same byte patterns as a YARA rule proven over 27k+ DexGuard APKs. Every match is logged, listed in
+`report.json` under `returnToJava` (pattern, file offset, mapped address via the ELF program headers,
+register and constant), and the presence of the native tier feeds `diagnosis.txt` with the advice to
+run the library through the unidbg backend and hook the reported address.
+
 ## 2.1.0
 
 Built against `io.github.flyphantomfly:jadx-emu` 0.2.0 and released under GPLv2. The native-unidbg module and the old CI workflow were dropped, and both are still in the v2.0.0 tag.

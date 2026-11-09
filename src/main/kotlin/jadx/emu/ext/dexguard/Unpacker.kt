@@ -39,6 +39,10 @@ internal class Unpacker(
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "dexguard-unpacker").apply { isDaemon = true } }
     @Volatile private var current: Future<*>? = null
 
+    // Fingerprint of DexGuard's native "return to Java" routine in the APK's arm64 libraries.
+    // Scanned at most once per session ([nativeRoutine]); results feed log, report and diagnosis.
+    @Volatile private var nativeRoutineCache: List<NativeRoutineScan.Result>? = null
+
     // Multi-stage fixpoint bookkeeping: classes newly revealed by a load, and (class|shortId) already run.
     private val pending = LinkedHashSet<String>()
     private val visited = HashSet<String>()
@@ -109,6 +113,35 @@ internal class Unpacker(
             "hidden dex {} ({} classDefs, {} classes) written to {}",
             name, DexBytes.classDefCount(bytes), src.allMethods().map { it.declClass }.distinct().size, path,
         )
+    }
+
+    /**
+     * Scan the APK's arm64 libraries once for the DexGuard native "return to Java" routine
+     * ([NativeRoutineScan]) and log what the fingerprint found. The results feed report.json and
+     * diagnosis.txt; a hit says the native string/payload tier is present even when nothing was
+     * recovered, and the reported addresses are where a native backend can hook the routine.
+     */
+    private fun nativeRoutine(): List<NativeRoutineScan.Result> {
+        nativeRoutineCache?.let { return it }
+        val results = ctx.jadx.args.inputFiles.firstOrNull { Repackager.isApk(it) }?.let { apk ->
+            runCatching { NativeRoutineScan.scan(apk) }
+                .onFailure { ctx.log.warn("return-to-java scan failed: {}", it.toString()) }
+                .getOrDefault(emptyList())
+        }.orEmpty()
+        if (results.isEmpty()) {
+            ctx.log.info("return-to-java scan: no DexGuard native routine fingerprint in the APK's arm64 libraries")
+        } else {
+            for (r in results) for (m in r.matches) {
+                val vaddr = if (m.virtualAddress >= 0) "0x%08x".format(m.virtualAddress) else "?"
+                ctx.log.info(
+                    "return-to-java: DexGuard native routine found via fingerprint {} in {} at file offset 0x{} (vaddr {}, builds 0x{} in x{})",
+                    m.pattern, r.lib, "%x".format(m.fileOffset), vaddr, "%08x".format(m.constant), m.register,
+                )
+            }
+            Telemetry.event("nativeRoutine", "return-to-java fingerprint in " + results.joinToString(", ") { it.lib })
+        }
+        nativeRoutineCache = results
+        return results
     }
 
     private fun unpackFromClass(rawClassName: String) {
@@ -196,6 +229,7 @@ internal class Unpacker(
     private fun scan() {
         ctx.log.info("scanning for loader-like classes (mode={})...", config.scanMode)
         val hits = CandidateScanner(ctx.jadx.args.inputFiles, ctx.emu.source, config.scanMode).scan()
+        nativeRoutine()   // include the native return-to-Java fingerprint in "scan" output too
         if (hits.isEmpty()) {
             logNoCandidates("scan")
             return
@@ -314,6 +348,7 @@ internal class Unpacker(
         crypto?.reset()
         decrypt?.reset()
         Telemetry.reset()
+        nativeRoutine()   // scans once and logs the fingerprint before work starts
     }
 
     private fun pastDeadline(): Boolean = deadlineMs > 0L && System.currentTimeMillis() > deadlineMs
@@ -324,14 +359,14 @@ internal class Unpacker(
         // engine dedups a dex it already saw this session, so a re-recovered dex wouldn't be re-added.
         ctx.log.info("{}: {} hidden dex file(s) on disk ({})", label, files.size, outDir)
         if (limitHits > 0) ctx.log.warn("{}: {} run(s) hit the maxMillis time limit - results may be INCOMPLETE; re-run with a larger maxMillis", label, limitHits)
-        writeReport(files)
+        writeReport(files, nativeRoutine())
         Telemetry.write(outDir.resolve("telemetry.json"))
         if (Telemetry.enabled) ctx.log.info("telemetry written to {}", outDir.resolve("telemetry.json"))
         crypto?.flush(outDir)
         decrypt?.flush(outDir)
         // Prescriptive diagnosis: on zero recovery say WHY and what to change, from the run's counters.
         val sourceEmpty = runCatching { ctx.emu.source.allMethods().isEmpty() }.getOrDefault(false)
-        Diagnosis.report(ctx.log, outDir, files.size, sourceEmpty, limitHits)
+        Diagnosis.report(ctx.log, outDir, files.size, sourceEmpty, limitHits, nativeRoutine())
         if (files.isNotEmpty()) offer(files)
     }
 
@@ -375,11 +410,11 @@ internal class Unpacker(
         }
     }
 
-    private fun writeReport(files: List<Path>) {
+    private fun writeReport(files: List<Path>, native: List<NativeRoutineScan.Result> = emptyList()) {
         runCatching {
             val env = if (::profile.isInitialized) profile else DeviceProfile()
             val pkg = if (::app.isInitialized) runCatching { app.packageName }.getOrNull() else null
-            RunReport.write(outDir.resolve("report.json"), recoveredDexBytes(files), files, env, pkg)
+            RunReport.write(outDir.resolve("report.json"), recoveredDexBytes(files), files, env, pkg, native)
         }.onFailure { ctx.log.debug("could not write report.json: {}", it.toString()) }
     }
 

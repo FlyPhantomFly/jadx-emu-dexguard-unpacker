@@ -44,6 +44,17 @@ Each run writes to `~/.config/jadx/plugins-data/jadx-emu/data/dexguard-unpacker/
 - `diagnosis.txt`, written when nothing was recovered, with the likely cause and what to try
 - `crypto/crypto.json`, when real `javax.crypto` decryption was seen
 
+## Native decryptor detection (return to Java)
+
+Before each run the extension scans the APK's `lib/arm64-v8a/*.so` for the fingerprint of DexGuard's
+centralized **return-to-Java** routine - the one place a .so's decryption funnels back into Java. The
+fingerprint is the six `movz`+`movk` constant pairs the routine builds (0x55AA55AA, 0xAAAA5555,
+0x2A55AA55 into x10/x12/x13), field-proven by a YARA rule across 27k+ DexGuard APKs over five months.
+
+A hit is logged (pattern, file offset, memory address), recorded under `returnToJava` in `report.json`,
+and turns into a diagnosis line telling you to run the library with the unidbg native backend
+(`nativeBackend=unidbg`) and instrument the reported address to capture every decrypted return value.
+
 ## Settings
 
 Everything is optional and lives in `dexguard-unpacker.properties` next to those folders. [USAGE.md](USAGE.md) lists every setting and a troubleshooting table.

@@ -13,15 +13,22 @@ import java.nio.file.Path
  * reports the always-knowable facts (recovery count, empty source, time-limit hits) and points you at
  * `telemetry=true` for the detailed version. Everything here is derived from signals the extension
  * already records (crypto capture, the inline scheduler, cdex skips, un-foldable stubs, unresolved
- * references) - no new instrumentation.
+ * references, and the [NativeRoutineScan] return-to-Java fingerprint) - no new runtime instrumentation.
  *
  * With telemetry on, every VM also reports to [EngineDiagnostics], so a zero-recovery run names the host calls the
  * engine refused to run and the framework methods that have no stub - read from the engine, not inferred.
  */
 internal object Diagnosis {
 
-    fun report(log: Logger, outDir: Path, recovered: Int, sourceEmpty: Boolean, limitHits: Int) {
-        val lines = build(recovered, sourceEmpty, limitHits)
+    fun report(
+        log: Logger,
+        outDir: Path,
+        recovered: Int,
+        sourceEmpty: Boolean,
+        limitHits: Int,
+        nativeRoutine: List<NativeRoutineScan.Result> = emptyList(),
+    ) {
+        val lines = build(recovered, sourceEmpty, limitHits, nativeRoutine)
         if (recovered > 0) {
             // Partial-recovery hints only (don't nag on a clean run).
             lines.forEach { log.info("diagnosis: {}", it) }
@@ -62,7 +69,7 @@ internal object Diagnosis {
         )
     }
 
-    private fun build(recovered: Int, sourceEmpty: Boolean, limitHits: Int): List<String> {
+    private fun build(recovered: Int, sourceEmpty: Boolean, limitHits: Int, nativeRoutine: List<NativeRoutineScan.Result> = emptyList()): List<String> {
         val out = ArrayList<String>()
 
         if (sourceEmpty) out.add(
@@ -73,6 +80,17 @@ internal object Diagnosis {
             "$limitHits run(s) hit the maxMillis time limit and were CUT OFF - work after the cut (incl. later " +
                 "hidden dex) was not produced. Set maxMillis=0, and clockAdvanceMs=1000 if a timing loop spins.",
         )
+
+        nativeRoutine.firstOrNull { it.found }?.let { hit ->
+            val m = hit.matches.first()
+            val addr = if (m.virtualAddress >= 0) ", memory address 0x%08x in ${hit.lib}".format(m.virtualAddress) else " (in ${hit.lib})"
+            out.add(
+                "DexGuard's centralized native \"return to Java\" routine was found (fingerprint ${m.pattern}$addr). " +
+                    "Whatever the .so decrypts funnels back to Java through it, so the native string/payload tier is present: " +
+                    "run the library with the unidbg backend (nativeBackend=unidbg + nativeMethods=Lcls;->name) and instrument this " +
+                    "address to capture every decrypted return value. report.json records all matches.",
+            )
+        }
 
         val cdexSkipped = Telemetry.counterOf("dex.cdexSkipped")
         if (cdexSkipped > 0) out.add(
