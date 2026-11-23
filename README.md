@@ -10,7 +10,7 @@ A quick scan of the raw dex ranks the classes most likely to load hidden code. T
 
 ## Install
 
-You need jadx 1.5.6 or newer with the jadx-emu 0.2.0 plugin installed (any later engine works too; this tree is tested against 0.4.0).
+You need jadx 1.5.6 or newer with the jadx-emu 0.2.0 plugin installed (any later engine works too; this tree is tested against 0.4.1).
 
 ```
 ./scripts/deploy-engine.sh ~/github/jadx-emu    # builds the engine, publishes it to ~/.m2, installs the plugin jar
