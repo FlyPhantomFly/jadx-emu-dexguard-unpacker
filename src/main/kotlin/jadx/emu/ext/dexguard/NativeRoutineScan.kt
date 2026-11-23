@@ -15,9 +15,9 @@ import java.util.zip.ZipFile
  * constants into a register:
  *
  *     $a: movz x12, #0x55AA ; movk x12, #0x55AA, lsl #16  ->  x12 = 0x55AA55AA
- *     $b: movz x12, #0xAA55 ; movk x12, #0xAA55, lsl #16  ->  x12 = 0xAAAA5555
+ *     $b: movz x12, #0xAA55 ; movk x12, #0xAA55, lsl #16  ->  x12 = 0xAA55AA55
  *     $c: movz x12, #0xAA55 ; movk x12, #0x2A55, lsl #16  ->  x12 = 0x2A55AA55
- *     $d: movz x13, #0xAA55 ; movk x13, #0xAA55, lsl #16  ->  x13 = 0xAAAA5555
+ *     $d: movz x13, #0xAA55 ; movk x13, #0xAA55, lsl #16  ->  x13 = 0xAA55AA55
  *     $e: movz x10, #0x55AA ; movk x10, #0x55AA, lsl #16  ->  x10 = 0x55AA55AA
  *     $f: movz x13, #0xAA55 ; movk x13, #0x2A55, lsl #16  ->  x13 = 0x2A55AA55
  *

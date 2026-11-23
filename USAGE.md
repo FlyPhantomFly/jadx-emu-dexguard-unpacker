@@ -42,7 +42,7 @@ These are fallbacks. DexGuard normally hands the plaintext straight to the class
 | key | default | what it does |
 |---|---|---|
 | telemetry | false | Write `telemetry.json` and attach the engine's diagnostics to every VM, so a run that recovers nothing names the host calls the engine refused and the framework calls that had no stub. Turn it on when debugging. |
-| nativeBackend | none | `none` wires no native bridge. A native backend can be added as a separate jar, but none is bundled. |
+| nativeBackend | none | `none` wires no native bridge. A native backend can be added as a separate `NativeBackendProvider` adapter jar, but none has been bundled since 2.1.0. |
 
 The fake device is seeded from the app's manifest. Override it with `device.manufacturer`, `device.brand`, `device.model`, `device.device`, `device.product`, `device.hardware`, `device.fingerprint`, `device.tags`, `device.type`, `device.androidId`, `device.installer`, `device.sdkInt`, `device.minSdk`, `device.targetSdk` or `device.debuggable`.
 

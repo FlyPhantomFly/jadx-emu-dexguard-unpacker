@@ -317,8 +317,18 @@ internal class Unpacker(
         finish("auto-sweep")
     }
 
-    /** Run the sweep synchronously (headless auto-unpack pass entry point). */
-    fun autoSweep() = sweep()
+    /** Run the sweep on the same worker thread the GUI actions use, and wait for it (headless auto-unpack entry
+     *  point). Routing it through the worker keeps the pass and a concurrent GUI click from racing on the shared
+     *  sweep state; waiting keeps the decompile pass synchronous, so headless runs still produce their outputs. */
+    fun autoSweep() {
+        val task = worker.submit { sweep() }
+        current = task
+        try {
+            task.get()
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw e.cause ?: e
+        }
+    }
 
     private fun repackage() {
         val dexes = recoveredDexBytes()

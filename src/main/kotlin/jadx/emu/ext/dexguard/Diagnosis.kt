@@ -86,9 +86,9 @@ internal object Diagnosis {
             val addr = if (m.virtualAddress >= 0) ", memory address 0x%08x in ${hit.lib}".format(m.virtualAddress) else " (in ${hit.lib})"
             out.add(
                 "DexGuard's centralized native \"return to Java\" routine was found (fingerprint ${m.pattern}$addr). " +
-                    "Whatever the .so decrypts funnels back to Java through it, so the native string/payload tier is present: " +
-                    "run the library with the unidbg backend (nativeBackend=unidbg + nativeMethods=Lcls;->name) and instrument this " +
-                    "address to capture every decrypted return value. report.json records all matches.",
+                    "Whatever the .so decrypts funnels back to Java through it, so the native string/payload tier is present. " +
+                    "Running the library needs a native backend adapter module for this extension " +
+                    "(none is shipped since 2.1.0; report.json records all matches).",
             )
         }
 
@@ -142,8 +142,8 @@ internal object Diagnosis {
 
         out.add(
             "Common fixes: maxMillis=0 (no time cap) | clockAdvanceMs=1000 (skip timing loops) | " +
-                "nativeBackend=unidbg + nativeMethods=Lcls;->name (native decryptor) | sweepClasses=com.app.Loader " +
-                "(inject a known loader) | captureDecrypt=true + captureDecryptMethods=... (custom decrypt).",
+                "sweepClasses=com.app.Loader (inject a known loader) | " +
+                "captureDecrypt=true + captureDecryptMethods=... (custom decrypt).",
         )
         return out
     }

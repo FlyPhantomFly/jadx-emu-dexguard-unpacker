@@ -1,10 +1,22 @@
 # Changes
 
+## 2.2.1
+
+Maintenance; no behavior change to the recovery path (FaceTec 10.0.30 gate: 4 dex, unchanged).
+
+- `autoSweep()` (headless `autoUnpack=true`) runs on the same worker thread the GUI actions use and waits for it, so the decompile pass can no longer race a GUI click on the shared sweep state.
+- `requiredEmuVersion` corrected to `0.2.0` (the extension calls `Hooks.after`, a 0.2.0 API).
+- Diagnosis and docs no longer advertise a working `nativeBackend=unidbg` / `nativeMethods=...` path: no `NativeBackendProvider` adapter has shipped since 2.1.0, so the native tier is scan-and-report only.
+- Fingerprint documentation constants `$b`/`$d` corrected to `0xAA55AA55` (the stored instruction bytes decode to it).
+- `scripts/deploy-engine.sh` now exits 1 when the installed jadx-emu jar count is not exactly one.
+
+# Changes
+
 ## 2.2.0
 
 The extension now detects DexGuard's centralized native "return to Java" routine before it runs.
 `NativeRoutineScan` scans the APK's `lib/arm64-v8a/*.so` for the six `movz`+`movk` AArch64
-constant pairs (0x55AA55AA / 0xAAAA5555 / 0x2A55AA55 into x10/x12/x13) that fingerprint the routine -
+constant pairs (0x55AA55AA / 0xAA55AA55 / 0x2A55AA55 into x10/x12/x13) that fingerprint the routine -
 the same byte patterns as a YARA rule proven over 27k+ DexGuard APKs. Every match is logged, listed in
 `report.json` under `returnToJava` (pattern, file offset, mapped address via the ELF program headers,
 register and constant), and the presence of the native tier feeds `diagnosis.txt` with the advice to

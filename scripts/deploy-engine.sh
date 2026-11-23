@@ -27,7 +27,7 @@ fi
 
 n="$(ls "$PLUGINS"/jadx-emu*.jar 2>/dev/null | wc -l)"
 ls -la "$PLUGINS"/jadx-emu*.jar 2>/dev/null | sed 's/^/  /'
-if [ "$n" -eq 1 ]; then echo "engine ok: exactly one jadx-emu jar"; else echo "!! expected one jadx-emu jar, found $n. Remove the extras."; fi
+if [ "$n" -eq 1 ]; then echo "engine ok: exactly one jadx-emu jar"; else echo "!! expected one jadx-emu jar, found $n. Remove the extras." >&2; exit 1; fi
 echo "Restart jadx. The log should say: jadx-emu <version> loaded ..."
 echo "A NoSuchMethodError when an extension starts means it was built against a different engine than the installed one."
 echo "Next: scripts/deploy.sh"

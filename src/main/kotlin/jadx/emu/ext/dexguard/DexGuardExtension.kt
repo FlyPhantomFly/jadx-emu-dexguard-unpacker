@@ -7,7 +7,7 @@ import jadx.plugins.emu.api.ExtensionMode
 import jadx.plugins.emu.exec.NativeBridge as EngineNativeBridge
 import java.util.ServiceLoader
 
-const val DEXGUARD_UNPACKER_VERSION = "2.2.0"
+const val DEXGUARD_UNPACKER_VERSION = "2.2.1"
 
 class DexGuardExtension : EmuExtension {
 
@@ -16,7 +16,7 @@ class DexGuardExtension : EmuExtension {
         name = "DexGuard unpacker",
         description = "Unpacks the dex files DexGuard loads at runtime",
         mode = ExtensionMode.ON_DEMAND,
-        requiredEmuVersion = "0.1.0",
+        requiredEmuVersion = "0.2.0",
     )
 
     override fun init(ctx: EmuExtensionContext) {
@@ -93,7 +93,10 @@ class DexGuardExtension : EmuExtension {
             val provider = ServiceLoader.load(NativeBackendProvider::class.java, cl)
                 .firstOrNull { it.id.equals(which, ignoreCase = true) }
             if (provider == null) {
-                ctx.log.info("dexguard-unpacker: native backend '{}' not found on classpath; using replay", which)
+                ctx.log.info(
+                    "dexguard-unpacker: no NativeBackendProvider adapter for '{}' on the classpath (none is shipped since 2.1.0); using replay",
+                    which,
+                )
                 null
             } else {
                 ctx.log.info("dexguard-unpacker: using native backend '{}'", provider.id)

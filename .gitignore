@@ -7,3 +7,6 @@ build/
 # maintainer docs are kept local only (never committed; synced to release trees before staging)
 AGENTS.md
 CLAUDE.md
+
+# code-reviewer findings (local only, never committed)
+reports/
