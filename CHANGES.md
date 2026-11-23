@@ -1,5 +1,19 @@
 # Changes
 
+## 2.3.0
+
+The native backend path works again — through the engine's backend registry instead of the removed in-repo adapter.
+
+- `nativeBackend=<id>` now resolves the ENGINE backend (`ctx.emu.nativeBackend(id)`, engine 0.3.0+) and opens a `NativeRequest` from three new settings: `nativeMethods` (`Lcls;->name`, comma-separated), `nativeLibs` (`.so` names, main first) and `nativeAbi`. `nativeApk` selects the APK that holds the libraries — defaults to the jadx input; `.apks` bundles auto-extract their arm64 split.
+- The bridge resolves at the first VM build (memoized) rather than at extension init, so extension jar order doesn't matter.
+- The dead `NativeBackendProvider` SPI (no implementation since 2.1.0) is removed.
+- `EMU_VERSION` default moved to 0.4.1 (the compile pin); `requiredEmuVersion` is now `0.3.0` — the true API floor (`NativeBackend`/`NativeRequest`/`registerNativeBackend`, plus the 0.2.0 `Hooks.after`).
+- README/USAGE document the native settings.
+
+Verified: FaceTec 10.0.30 with `nativeBackend=unidbg` — the bridge activates once, both DexGuard libs (`libbf7d.so`, `libc866.so`) load into unidbg, 119 recovered natives arm, default path byte-identical (4 dex, SMOKE: PASS). Capture on that target is gated by the engine's host policy denying reflective `Method.invoke` (the loader dispatches its natives reflectively) — documented in README as the next unlock.
+
+# Changes
+
 ## 2.2.1
 
 Maintenance; no behavior change to the recovery path (FaceTec 10.0.30 gate: 4 dex, unchanged).

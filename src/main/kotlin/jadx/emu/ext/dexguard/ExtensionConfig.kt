@@ -46,8 +46,22 @@ internal class ExtensionConfig private constructor(private val p: Properties) {
     /** When true, run the auto-sweep automatically during decompilation (headless `jadx app.apk`). */
     val autoUnpack: Boolean get() = bool("autoUnpack", false)
 
-    /** Native (JNI) execution backend: "none" (replay only) or a provider id like "unidbg". */
+    /** Native (JNI) execution backend: "none" (replay only) or the id of a registered engine backend, e.g. "unidbg". */
     val nativeBackend: String get() = (str("nativeBackend") ?: "none").lowercase()
+
+    /** JNI methods the engine may dispatch to the native backend, as `Lcls;->name` (name only; all overloads run). */
+    val nativeMethods: List<String>
+        get() = str("nativeMethods")?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+
+    /** Libraries to load in the backend, full file names, main library first (e.g. `libb4f7.so,libc7d5.so`). */
+    val nativeLibs: List<String>
+        get() = str("nativeLibs")?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+
+    /** ABI of the libraries (unidbg only knows arm64-v8a and armeabi-v7a). */
+    val nativeAbi: String get() = str("nativeAbi") ?: "arm64-v8a"
+
+    /** APK that contains the libraries. Defaults to the jadx input; for a bundled app set this to the arm64 split. */
+    val nativeApk: String? get() = str("nativeApk")
 
     /** ms the virtual clock advances per read; raise to make anti-analysis timing loops exit fast (default 1). */
     val clockAdvanceMs: Long get() = long("clockAdvanceMs", 1L)

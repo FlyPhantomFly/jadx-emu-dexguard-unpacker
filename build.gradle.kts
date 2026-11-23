@@ -4,7 +4,7 @@ plugins {
     kotlin("jvm") version "2.3.10"
 }
 
-version = System.getenv("VERSION") ?: "2.2.1"
+version = System.getenv("VERSION") ?: "2.3.0"
 
 // Built against io.github.flyphantomfly:jadx-emu, resolved from ~/.m2 (scripts/deploy-engine.sh publishes it there).
 // Set EMU_VERSION if the engine you published has a different version.

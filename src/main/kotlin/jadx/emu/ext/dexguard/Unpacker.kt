@@ -52,9 +52,9 @@ internal class Unpacker(
     private lateinit var profile: DeviceProfile
     private var crypto: CryptoCapture? = null
     private var decrypt: DecryptCapture? = null
-    private var nativeBridge: EngineNativeBridge? = null
+    private var nativeBridge: (() -> EngineNativeBridge?)? = null
 
-    fun attach(hidden: HiddenDex, app: AppInfo, profile: DeviceProfile, crypto: CryptoCapture?, decrypt: DecryptCapture?, nativeBridge: EngineNativeBridge?) {
+    fun attach(hidden: HiddenDex, app: AppInfo, profile: DeviceProfile, crypto: CryptoCapture?, decrypt: DecryptCapture?, nativeBridge: () -> EngineNativeBridge?) {
         this.hidden = hidden
         this.app = app
         this.profile = profile
@@ -383,7 +383,7 @@ internal class Unpacker(
     private fun run(method: DexMethod, args: List<Any?>) {
         // Same as engine.newVm(limits, hooks, androidEnvUnknown=false) but also wires the native bridge and this
         // extension's diagnostics (see EngineCompat). A null bridge keeps the validated, bridge-less behavior.
-        val vm = EngineCompat.newVm(ctx.emu.engine, limits, nativeBridge, hooks.raw, false)
+        val vm = EngineCompat.newVm(ctx.emu.engine, limits, nativeBridge?.invoke(), hooks.raw, false)
         // Instance entry points (attachBaseContext/onCreate/attachInfo) need a non-null `this`.
         val receiver = if (method.isStatic) null else DvmObject(method.declClass)
         val t0 = System.nanoTime()

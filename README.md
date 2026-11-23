@@ -18,7 +18,7 @@ You need jadx 1.5.6 or newer with the jadx-emu 0.2.0 plugin installed (any later
 ./scripts/smoke.sh                              # must end with SMOKE: PASS
 ```
 
-Use the path to your own jadx-emu checkout. Restart jadx afterwards. The log should show `jadx-emu 0.2.0 loaded: 1 extension(s) found ..., 1 active` and `dexguard-unpacker v2.2.1`.
+Use the path to your own jadx-emu checkout. Restart jadx afterwards. The log should show `jadx-emu 0.2.0 loaded: 1 extension(s) found ..., 1 active` and `dexguard-unpacker v2.3.0`.
 
 ## Use
 
@@ -63,7 +63,19 @@ Everything is optional and lives in `dexguard-unpacker.properties` next to those
 
 Many DexGuard apps only encrypt strings and never load hidden dex. On those the run recovers nothing, and `diagnosis.txt` says what it saw. OnePay is one of them.
 
-Decryption that happens in a .so isn't run. The `nativeBackend` setting looks for a `NativeBackendProvider` adapter jar, but none has been bundled since 2.1.0, so today only `native-replay.properties` can wire a bridge.
+## Native decryption
+
+When a decryptor lives in a .so, the extension can run it through the engine's native backend. Set in `dexguard-unpacker.properties`:
+
+| key | example | what it does |
+|---|---|---|
+| nativeBackend | unidbg | id of the registered engine backend (`jadx-emu-native-unidbg` registers `unidbg`). `none` keeps the validated bridge-less path. |
+| nativeMethods | Lcom/foo/Bar;->read,Lcom/foo/Baz;->dec | JNI methods the engine may dispatch (name only; all overloads run). |
+| nativeLibs | libb4f7.so,libc7d5.so | libraries to load in the backend, main library first. |
+| nativeAbi | arm64-v8a | ABI of the libraries. |
+| nativeApk | /path/…/split_config.arm64_v8a.apk | the APK that contains the libraries. Defaults to the jadx input; for a bundled app point it at the arm64 split (`.apks` bundles are auto-extracted). |
+
+Requires the jadx-emu 0.3.0+ engine with the unidbg extension installed; the bridge resolves at the first VM build, so extension load order doesn't matter. Note that DexGuard's loaders often invoke their natives reflectively, which the engine's host policy denies — allow `java.lang.reflect.Method;->invoke` in the host policy (or hook it) when a run shows `HOST_UNKNOWN_INPUT @ java/lang/reflect/Method;->invoke` in the telemetry.
 
 On FaceTec the sweep takes about 12 minutes, against about 4 on the 1.x releases. The engine rewrite, `Hooks.after` and the diagnostics sink were ruled out. The cause hasn't been found.
 

@@ -4,10 +4,12 @@ import jadx.plugins.emu.api.EmuExtension
 import jadx.plugins.emu.api.EmuExtensionContext
 import jadx.plugins.emu.api.EmuExtensionInfo
 import jadx.plugins.emu.api.ExtensionMode
+import jadx.plugins.emu.api.NativeRequest
 import jadx.plugins.emu.exec.NativeBridge as EngineNativeBridge
-import java.util.ServiceLoader
+import java.io.File
+import java.nio.file.Files
 
-const val DEXGUARD_UNPACKER_VERSION = "2.2.1"
+const val DEXGUARD_UNPACKER_VERSION = "2.3.0"
 
 class DexGuardExtension : EmuExtension {
 
@@ -16,7 +18,7 @@ class DexGuardExtension : EmuExtension {
         name = "DexGuard unpacker",
         description = "Unpacks the dex files DexGuard loads at runtime",
         mode = ExtensionMode.ON_DEMAND,
-        requiredEmuVersion = "0.2.0",
+        requiredEmuVersion = "0.3.0",
     )
 
     override fun init(ctx: EmuExtensionContext) {
@@ -51,13 +53,9 @@ class DexGuardExtension : EmuExtension {
         // dispatch and regresses recovery. It is wired ONLY when a backend (e.g. unidbg) actually
         // loaded, or when native-replay.properties supplied mappings. The replay object always hooks
         // reflective Method.invoke (as in the validated build); that is a no-op when it has no mappings.
-        val backend = loadNativeBackend(ctx, config)
-        val replay = NativeBridge(ctx).also { it.load() }
-        replay.register(hooks)
-        val engineNative: EngineNativeBridge? = backend ?: replay.takeIf { it.hasReplay() }
-        if (engineNative != null) {
-            ctx.log.info("dexguard-unpacker: native bridge ACTIVE ({})", if (backend != null) config.nativeBackend else "replay")
-        }
+        // memoized: every call site shares one resolve (one backend open), evaluated on the first VM build
+        val once = lazy { resolveNativeBridge(ctx, config) }
+        val engineNative: () -> EngineNativeBridge? = { once.value }
 
         val hidden = HiddenDex(ctx.emu.source, ctx.emu.engine, hooks, unpacker.limits, ctx.log, unpacker::onLoad, app, vfs, engineNative, config.persistHiddenVm)
         val engineCtx = ctx.emu.engine
@@ -84,24 +82,72 @@ class DexGuardExtension : EmuExtension {
         ctx.addPass(AutoUnpackPass(unpacker, config, ctx.log))
     }
 
-    /** Discover an optional native backend (e.g. unidbg) via ServiceLoader when configured. */
-    private fun loadNativeBackend(ctx: EmuExtensionContext, config: ExtensionConfig): EngineNativeBridge? {
+    /**
+     * The native bridge for VMs, resolved on first VM creation (not in [init]) because extensions initialize
+     * in jar-name order and the backend provider (e.g. `native-unidbg`) may register later.
+     *
+     * With `nativeBackend=<id>` the ENGINE backend API is used: `ctx.emu.nativeBackend(id)` opens a
+     * `NativeRequest(apk, methods, libs, abi)` and the returned bridge dispatches exactly the named methods.
+     * `nativeBackend=none` keeps the validated bridge-less path; a `native-replay.properties` replay bridge
+     * still applies on top when present.
+     */
+    private fun resolveNativeBridge(ctx: EmuExtensionContext, config: ExtensionConfig): EngineNativeBridge? {
         val which = config.nativeBackend
         if (which.equals("none", ignoreCase = true)) return null
+
+        val replay = NativeBridge(ctx).also { it.load() }
+        if (config.nativeMethods.isEmpty() || config.nativeLibs.isEmpty()) {
+            ctx.log.info(
+                "dexguard-unpacker: nativeBackend='{}' but nativeMethods ({}) / nativeLibs ({}) is empty; using replay only",
+                which, config.nativeMethods.size, config.nativeLibs.size,
+            )
+            return replay.takeIf { it.hasReplay() }
+        }
         return runCatching {
-            val cl = Thread.currentThread().contextClassLoader ?: javaClass.classLoader
-            val provider = ServiceLoader.load(NativeBackendProvider::class.java, cl)
-                .firstOrNull { it.id.equals(which, ignoreCase = true) }
-            if (provider == null) {
-                ctx.log.info(
-                    "dexguard-unpacker: no NativeBackendProvider adapter for '{}' on the classpath (none is shipped since 2.1.0); using replay",
+            val backend = ctx.emu.nativeBackend(which)
+            if (backend == null) {
+                ctx.log.warn(
+                    "dexguard-unpacker: no native backend '{}' is registered (is jadx-emu-native-unidbg installed and active?); using replay",
                     which,
                 )
-                null
-            } else {
-                ctx.log.info("dexguard-unpacker: using native backend '{}'", provider.id)
-                provider.create(ctx)
+                return@runCatching replay.takeIf { it.hasReplay() }
             }
-        }.onFailure { ctx.log.warn("dexguard-unpacker: native backend init failed: {}", it.toString()) }.getOrNull()
+            val apk = nativeApk(ctx, config)
+            if (apk == null) {
+                ctx.log.warn("dexguard-unpacker: could not resolve the APK holding the native libraries; using replay")
+                return@runCatching replay.takeIf { it.hasReplay() }
+            }
+            ctx.log.info(
+                "dexguard-unpacker: opening native backend '{}' ({} method(s), {} lib(s), {} from {})",
+                backend.id, config.nativeMethods.size, config.nativeLibs.size, config.nativeAbi, apk.name,
+            )
+            val bridge = backend.open(NativeRequest(apk, config.nativeMethods.toSet(), config.nativeLibs, config.nativeAbi))
+            ctx.log.info("dexguard-unpacker: native bridge ACTIVE ({})", backend.id)
+            bridge
+        }.getOrElse {
+            ctx.log.warn("dexguard-unpacker: native backend init failed: {} — falling back to replay", it.toString())
+            NativeBridge(ctx).also { r -> r.load() }.takeIf { r -> r.hasReplay() }
+        }
+    }
+
+    /** The APK that holds the libraries: `nativeApk` config, else the jadx input; a bundle's arm64 split is extracted. */
+    private fun nativeApk(ctx: EmuExtensionContext, config: ExtensionConfig): File? {
+        config.nativeApk?.let { return File(it) }
+        val apk = ctx.jadx.args.inputFiles.firstOrNull { Repackager.isApk(it) } ?: return null
+        val f = File(apk.absolutePath)
+        if (f.extension.lowercase() !in setOf("apks", "apkm", "xapk")) return f
+        val abiDir = "split_config.${config.nativeAbi}.apk"
+        return runCatching {
+            val outDir = ctx.dataDir.resolve("native-split").also { Files.createDirectories(it) }
+            val out = outDir.resolve(abiDir)
+            if (!Files.exists(out)) {
+                java.util.zip.ZipFile(f).use { bundle ->
+                    val entry = bundle.getEntry(abiDir) ?: return@runCatching null
+                    Files.copy(bundle.getInputStream(entry), out, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+            if (Files.exists(out)) out.toFile() else null
+        }.onFailure { ctx.log.warn("dexguard-unpacker: cannot extract {} from {}: {}", abiDir, f.name, it.toString()) }
+            .getOrNull()
     }
 }

@@ -42,7 +42,11 @@ These are fallbacks. DexGuard normally hands the plaintext straight to the class
 | key | default | what it does |
 |---|---|---|
 | telemetry | false | Write `telemetry.json` and attach the engine's diagnostics to every VM, so a run that recovers nothing names the host calls the engine refused and the framework calls that had no stub. Turn it on when debugging. |
-| nativeBackend | none | `none` wires no native bridge. A native backend can be added as a separate `NativeBackendProvider` adapter jar, but none has been bundled since 2.1.0. |
+| nativeBackend | none | `none` wires no native bridge. Any other value is looked up in the engine's backend registry (e.g. `unidbg` from jadx-emu-native-unidbg, engine 0.3.0+). |
+| nativeMethods | (empty) | JNI methods the engine may dispatch to the backend, `Lcls;->name` comma-separated (name only). Required for a backend to arm. |
+| nativeLibs | (empty) | Libraries to load in the backend, full `.so` file names, main first. Required for a backend to arm. |
+| nativeAbi | arm64-v8a | ABI of the libraries. |
+| nativeApk | (input) | APK holding the libraries. Defaults to the jadx input; for `.apks` bundles the arm64 split is extracted automatically, or set it explicitly. |
 
 The fake device is seeded from the app's manifest. Override it with `device.manufacturer`, `device.brand`, `device.model`, `device.device`, `device.product`, `device.hardware`, `device.fingerprint`, `device.tags`, `device.type`, `device.androidId`, `device.installer`, `device.sdkInt`, `device.minSdk`, `device.targetSdk` or `device.debuggable`.
 

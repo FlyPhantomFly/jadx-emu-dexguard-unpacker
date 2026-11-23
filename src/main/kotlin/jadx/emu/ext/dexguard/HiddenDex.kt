@@ -26,7 +26,7 @@ internal class HiddenDex(
     private val onLoad: (ByteArray, DexInputSource) -> Unit,
     private val app: AppInfo,
     private val vfs: VirtualFs,
-    private val nativeBridge: EngineNativeBridge?,
+    private val nativeBridge: () -> EngineNativeBridge?,
     private val persistVm: Boolean = false,
 ) {
     private val loaders: MutableSet<Any> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
@@ -195,7 +195,7 @@ internal class HiddenDex(
         // This context is private to the hidden-dex VM: its diagnostics go to EngineDiagnostics, not the engine's log sink.
         ec.diagnostics.clear()
         ec.diagnostics.addAll(EngineDiagnostics.sinks())
-        val v = EngineCompat.newVm(ec, limits, nativeBridge, hooks.raw, true)
+        val v = EngineCompat.newVm(ec, limits, nativeBridge(), hooks.raw, true)
         hiddenVm = v
         return v
     }
